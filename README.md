@@ -26,8 +26,7 @@ HTTP service that detects checkboxes in a document image and classifies each one
 **Example:**
 
 ```bash
-# TODO: fill in once the service exists
-curl -X POST http://localhost:8000/detect -F "file=@sample.png"
+curl -X POST http://localhost:8000/detect -F "file=@testdata/sample-000.png"
 ```
 
 ## Requirements
@@ -46,6 +45,18 @@ curl -X POST http://localhost:8000/detect -F "file=@sample.png"
 - **Latency:** TODO: target time per image.
 
 ## Build and run
+
+### Local
+
+Requires Go 1.26+ and OpenCV 4.13 (the version gocv v0.43.0 expects). See [gocv's Linux install guide](https://gocv.io/getting-started/linux/).
+
+```bash
+go run ./cmd/server
+```
+
+The server listens on port 8000 by default. Set `PORT` to change it.
+
+### Docker
 
 TODO
 
