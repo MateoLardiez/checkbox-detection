@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"image"
+	"image/png"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -82,6 +84,31 @@ func TestDetectHandlerValidImage(t *testing.T) {
 	}
 
 	rec := postFile(t, "file", data)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var resp detectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Boxes) == 0 {
+		t.Fatal("expected at least one box")
+	}
+}
+
+func TestDetectHandlerImageWithoutCheckboxes(t *testing.T) {
+	gray := image.NewGray(image.Rect(0, 0, 200, 200))
+	for i := range gray.Pix {
+		gray.Pix[i] = 255
+	}
+	var pngData bytes.Buffer
+	if err := png.Encode(&pngData, gray); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := postFile(t, "file", pngData.Bytes())
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
