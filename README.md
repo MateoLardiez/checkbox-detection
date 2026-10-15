@@ -100,3 +100,6 @@ TODO
 ## Known limitations
 
 TODO
+
+## Future Improvements
+- Add another variant besides 'checked' 'not checked', which can be 'unkown'. In this case, a person needs to validate it. This way we can avoid false positives
