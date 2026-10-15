@@ -11,8 +11,8 @@ import (
 const (
 	minSideRatio = 0.005 // smallest checkbox side, as a fraction of image width
 	maxSideRatio = 0.03  // largest checkbox side, as a fraction of image width
-	minAspect    = 0.8   // narrowest width/height ratio accepted as a square
-	maxAspect    = 1.25  // widest width/height ratio accepted as a square
+	minAspect    = 0.67  // narrowest width/height ratio accepted as a checkbox
+	maxAspect    = 1.5   // widest width/height ratio accepted as a checkbox
 	approxEps    = 0.02  // how far a contour may deviate when reduced to corners (2% of its perimeter)
 	holeInflate  = 0.08  // growth per side of a hole's box to recover the border thickness, as a fraction of its side
 )
