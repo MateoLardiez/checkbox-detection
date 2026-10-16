@@ -3,6 +3,7 @@ package detector
 import (
 	"image"
 	"image/color"
+	"math"
 	"testing"
 
 	"gocv.io/x/gocv"
@@ -61,6 +62,44 @@ func fillRect(m *gocv.Mat, r image.Rectangle) {
 		for x := r.Min.X; x < r.Max.X; x++ {
 			m.SetUCharAt(y, x, 255)
 		}
+	}
+}
+
+// fillPolygon sets the inside of the polygon to white in a single-channel mask.
+func fillPolygon(m *gocv.Mat, pts []image.Point) {
+	poly := gocv.NewPointsVectorFromPoints([][]image.Point{pts})
+	defer poly.Close()
+	gocv.FillPoly(m, poly, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+}
+
+func TestFindCandidatesTiltedSquare(t *testing.T) {
+	bin := gocv.NewMatWithSize(1000, 1000, gocv.MatTypeCV8UC1)
+	defer bin.Close()
+
+	// 20x20 square rotated 25 degrees around (200,200); its bounding box is ~27px, under the 30px limit.
+	angle := 25 * math.Pi / 180
+	var square []image.Point
+	for _, c := range [][2]float64{{-10, -10}, {10, -10}, {10, 10}, {-10, 10}} {
+		x := c[0]*math.Cos(angle) - c[1]*math.Sin(angle)
+		y := c[0]*math.Sin(angle) + c[1]*math.Cos(angle)
+		square = append(square, image.Pt(200+int(math.Round(x)), 200+int(math.Round(y))))
+	}
+	fillPolygon(&bin, square)
+
+	if got := findCandidates(bin); len(got) != 1 {
+		t.Fatalf("got %d candidates %v, want the tilted square", len(got), got)
+	}
+}
+
+func TestFindCandidatesRejectsSlantedShape(t *testing.T) {
+	bin := gocv.NewMatWithSize(1000, 1000, gocv.MatTypeCV8UC1)
+	defer bin.Close()
+
+	// Trapezoid with a 26x25 bounding box: right size and four corners, but slanted sides.
+	fillPolygon(&bin, []image.Point{{208, 100}, {222, 100}, {226, 125}, {200, 125}})
+
+	if got := findCandidates(bin); len(got) != 0 {
+		t.Fatalf("got %v, want no candidates for a slanted shape", got)
 	}
 }
 

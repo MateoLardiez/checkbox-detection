@@ -14,6 +14,7 @@ const (
 	minAspect    = 0.67  // narrowest width/height ratio accepted as a checkbox
 	maxAspect    = 1.5   // widest width/height ratio accepted as a checkbox
 	approxEps    = 0.02  // how far a contour may deviate when reduced to corners (2% of its perimeter)
+	maxCornerGap = 0.10  // how far a corner may be from the box's ideal corner, as a fraction of its longer side
 	holeInflate  = 0.08  // growth per side of a hole's box to recover the border thickness, as a fraction of its side
 )
 
@@ -65,7 +66,7 @@ func looksLikeCheckbox(r image.Rectangle, contour gocv.PointVector, minSide, max
 	if aspect := w / h; aspect < minAspect || aspect > maxAspect {
 		return false
 	}
-	return hasFourCorners(contour)
+	return isRectangle(contour)
 }
 
 // inflate grows a hole's box by the typical border thickness.
@@ -74,9 +75,27 @@ func inflate(r image.Rectangle) image.Rectangle {
 	return r.Inset(-pad)
 }
 
-// hasFourCorners reports whether the contour simplifies to a quadrilateral.
-func hasFourCorners(contour gocv.PointVector) bool {
+// isRectangle reports whether the contour simplifies to four corners that each
+// sit close to a corner of its minimum-area rotated rectangle. Tilted squares
+// pass, while slanted or irregular shapes (like a hand-drawn scribble) do not.
+func isRectangle(contour gocv.PointVector) bool {
 	approx := gocv.ApproxPolyDP(contour, approxEps*gocv.ArcLength(contour, true), true)
 	defer approx.Close()
-	return approx.Size() == 4
+	if approx.Size() != 4 {
+		return false
+	}
+
+	corners := approx.ToPoints()
+	ideal := gocv.MinAreaRect(contour)
+	maxGap := maxCornerGap * math.Max(float64(ideal.Width), float64(ideal.Height))
+	for _, want := range ideal.Points {
+		nearest := math.MaxFloat64
+		for _, got := range corners {
+			nearest = math.Min(nearest, math.Hypot(float64(got.X-want.X), float64(got.Y-want.Y)))
+		}
+		if nearest > maxGap {
+			return false
+		}
+	}
+	return true
 }
