@@ -42,7 +42,7 @@ curl -X POST http://localhost:8000/detect -F "file=@testdata/sample-000.png"
 - **Accuracy:** best effort, perfect accuracy is not expected.
 - **Robustness:** bad input never crashes the server.
 - **Determinism:** the same image always produces the same response (stable box ordering, fixed seeds, pinned dependencies).
-- **Latency:** TODO: target time per image.
+- **Latency:** measured with `curl` against the Docker container on a development machine, including the upload: 0.08 s for the small sample (1586x846) and 0.21 to 0.25 s for the full-page samples (2550x4200 and 2550x3301). It grows with the number of pixels.
 
 ## Build and run
 
@@ -101,17 +101,24 @@ The images are written to `output/`.
 
 ```
 checkbox-detection/
-├── go.mod
-├── cmd/server/main.go        # starts the HTTP server
+├── cmd/server/main.go          # starts the HTTP server
 ├── internal/
-│   ├── api/handler.go        # POST /detect: parse upload, call detector, write JSON
+│   ├── api/
+│   │   └── handler.go          # POST /detect: parse upload, call detector, write JSON
 │   └── detector/
-│       ├── detector.go       # Detect(img) []Box, runs the pipeline
-│       └── detector_test.go
-├── testdata/                 # sample document images
+│       ├── detector.go         # Detect(data) []Box: runs the pipeline below
+│       ├── preprocess.go       # grayscale + adaptive threshold
+│       ├── candidates.go       # contours + filters: which shapes look like checkboxes
+│       ├── classify.go         # checked / unchecked from the ink inside a box
+│       └── visualize_test.go   # draws detections on the samples (opt-in, see "Run the tests")
+├── testdata/                   # sample document images
 ├── Dockerfile
+├── .env.example                # VISUALIZE_DIR for the visualizer
+├── go.mod
 └── README.md
 ```
+
+Each source file has a `_test.go` next to it, except `main.go`.
 
 - `detector` has no HTTP knowledge: it takes image bytes and returns boxes, so it is testable with plain image files.
 - `api` has no OpenCV knowledge: it validates input, calls the detector, and returns JSON or a 4xx error.
@@ -119,24 +126,45 @@ checkbox-detection/
 
 ## Approach
 
-Flow of a `POST /detect` request, from upload to response:
+Classic computer vision with OpenCV (through gocv), no machine learning. Flow of a `POST /detect` request, from upload to response:
 
 1. **Receive.** The client uploads an image as `multipart/form-data` (field `file`).
-2. **Decode.** The handler reads the bytes and decodes them into an OpenCV image. If the file is empty or not an image, the request ends here with a 4xx.
-3. **Preprocess.** Convert to grayscale and apply an adaptive threshold, so ink is white on a black background regardless of scan lighting.
-4. **Detect.** Find contours and keep only those that look like checkboxes (small, roughly square, four corners, hollow). Each one yields a bounding box in the pixels of the uploaded image.
-5. **Classify.** For each box, measure how much ink is inside it (ignoring the border). Enough ink means checked, otherwise unchecked.
-6. **Respond.** Sort the boxes top to bottom, then left to right, and return them as JSON.
+2. **Decode.** The handler reads the bytes and decodes them into an OpenCV image. If the file is empty or not an image, the request ends here with a 400.
+3. **Preprocess** (`preprocess.go`). Convert to grayscale and apply an inverted adaptive threshold, so ink is white and paper black. "Adaptive" means each pixel is compared with the average of its 25x25 neighborhood (it counts as ink if it is 5 levels darker), which works with uneven scan lighting where a single global threshold would not.
+4. **Find candidates** (`candidates.go`). Extract contours (the outlines of white regions) and keep those that look like a checkbox:
+   - **Size:** each side between 0.5% and 3% of the image width. It is relative, so it does not depend on scan resolution.
+   - **Proportion:** width/height between 0.67 and 1.5. The checkboxes in the samples are slightly wider than tall.
+   - **Shape:** the contour simplifies to exactly four corners, and each one is close to a corner of its minimum rotated rectangle. This rejects slanted or irregular shapes (for example a hand-drawn scribble) while still accepting tilted squares.
 
-Each step is detailed in its own subsection below as the implementation lands.
+   A checkbox whose border touches a table line fuses with it, so its outer contour is not a square. In that case its inner border (the hole) is used instead, and its box is grown by 8% per side to recover the border thickness.
+5. **Classify** (`classify.go`). Ignore 25% of each side to skip the border, and measure the share of ink in the rest. 10% or more means checked. A ratio is used instead of "any ink" so scan specks do not count as marks. On the samples, empty boxes measured under 5% and marked ones over 15%, so 10% sits in the gap.
+6. **Respond.** Sort the boxes by `y1`, `x1`, `x2`, `y2` (a total order, so the output is deterministic) and return them as JSON. Images are never resized, so `bbox` is read directly in pixels of the uploaded image.
+
+The numbers above were tuned by eye on the four sample documents, using the visualizer (`visualize_test.go`) that draws the detections over each image.
 
 ## Tradeoffs
 
-TODO
+- **Classic computer vision instead of a trained model.** There are only four sample images and no labels to train or evaluate a model. Contours and filters need no training data, are fast, and always give the same output for the same input. The cost is hand-picked thresholds, tuned on those four samples, which may not transfer to other forms.
+- **gocv (OpenCV bindings) instead of pure Go.** It gives well-tested image primitives (threshold, contours) instead of reimplementing them. The cost is cgo and a heavy setup: OpenCV 4.13 must be installed to build locally, and the Docker image is about 3.9 GB.
+- **Single-stage Dockerfile.** Simplest to read and to run. A second stage that copies only the binary and the OpenCV libraries would shrink the image, at the cost of a longer Dockerfile.
+- **Relative sizes instead of fixed pixels.** Filters use fractions of the image width, so the same form scanned at another resolution still works. This assumes the image is a whole page.
+- **Inner borders accepted as candidates.** It recovers checkboxes fused with table lines (the whole second sample page depends on it), but a square-looking hole in some other shape could become a false positive.
 
 ## Known limitations
 
-TODO
+- **Damaged or unusual checkboxes are missed.** In the samples: one whose border is broken by a thick X, and one struck through by a long stroke. Hand-drawn shapes are rejected on purpose.
+- **Light marks.** A checkbox is "checked" only if at least 10% of its inside is ink, so a very thin or small mark can be reported as unchecked.
+- **Tilted pages.** Tilted checkboxes are detected, but the returned `bbox` is always axis-aligned and the ink is measured in an axis-aligned region, so classification is expected to degrade on strongly tilted pages. This was not tested on real tilted scans.
+- **Cropped or zoomed images.** Sizes are relative to the image width, so a crop that magnifies the checkboxes much more than a full page may fall outside the accepted range.
+- **Only rectangular checkboxes.** Circles (radio buttons) and other shapes are not detected.
+- **Possible false positives.** Square-looking shapes other than checkboxes can pass the filters. Letters of a diagonal watermark did in one case before a threshold change, and other cases may exist.
+- **Large uploads.** There is no size limit, and the whole image is decoded in memory.
 
 ## Future Improvements
-- Add another variant besides 'checked' 'not checked', which can be 'unkown'. In this case, a person needs to validate it. This way we can avoid false positives
+
+- Add another variant besides "checked" and "not checked", which can be "unknown". In this case, a person needs to validate it. This way we can avoid false positives.
+- Classify tilted checkboxes using their rotated rectangle (or straighten the page first), and return the rotated corners.
+- Label the sample documents by hand and measure precision and recall, to tune the thresholds with numbers.
+- Reject uploads above a size limit with a 413.
+- Order boxes by visual row (group nearby `y1` values) instead of strict `y1`, so a row reads left to right even when its boxes differ by a pixel or two.
+- Shrink the Docker image with a multi-stage build.
