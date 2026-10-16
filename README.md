@@ -48,7 +48,7 @@ curl -X POST http://localhost:8000/detect -F "file=@testdata/sample-000.png"
 
 ### Local
 
-Requires Go 1.26+ and OpenCV 4.13 (the version gocv v0.43.0 expects). See [gocv's Linux install guide](https://gocv.io/getting-started/linux/).
+Requires Go 1.25+ and OpenCV 4.13 (the version gocv v0.43.0 expects). See [gocv's Linux install guide](https://gocv.io/getting-started/linux/).
 
 ```bash
 go run ./cmd/server
@@ -58,7 +58,44 @@ The server listens on port 8000 by default. Set `PORT` to change it.
 
 ### Docker
 
-TODO
+No local Go or OpenCV needed, the image bundles both.
+
+```bash
+docker build -t checkbox-detection .
+docker run --rm -p 8000:8000 checkbox-detection
+```
+
+The first build downloads the base image (several GB). The service is then available at `http://localhost:8000`.
+
+### Try it
+
+With the server running (locally or in Docker), in another terminal:
+
+```bash
+# valid image: returns the detected boxes
+curl -X POST http://localhost:8000/detect -F "file=@testdata/sample-001.png"
+
+# not an image: returns 400 with an error message
+curl -X POST http://localhost:8000/detect -F "file=@README.md"
+```
+
+### Run the tests
+
+Needs the local setup above (Go and OpenCV).
+
+```bash
+go test ./...
+```
+
+To save each sample image with the detections drawn on it (red = checked, green = unchecked):
+
+```bash
+cp .env.example .env
+set -a && source .env && set +a
+go test ./...
+```
+
+The images are written to `output/`.
 
 ## System Structure
 
