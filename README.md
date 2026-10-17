@@ -139,6 +139,7 @@ Classic computer vision with OpenCV (through gocv), no machine learning. Flow of
    A checkbox whose border touches a table line fuses with it, so its outer contour is not a square. In that case its inner border (the hole) is used instead, and its box is grown by 8% per side to recover the border thickness.
 5. **Classify** (`classify.go`). Ignore 25% of each side to skip the border, and measure the share of ink in the rest. 10% or more means checked. A ratio is used instead of "any ink" so scan specks do not count as marks. On the samples, empty boxes measured under 5% and marked ones over 15%, so 10% sits in the gap.
 6. **Respond.** Sort the boxes by `y1`, `x1`, `x2`, `y2` (a total order, so the output is deterministic) and return them as JSON. Images are never resized, so `bbox` is read directly in pixels of the uploaded image.
+7. **Validate.** The pipeline was also run on different images, not only the four samples. The results were checked by hand: the processed images saved in `output/` (see "Run the tests") were inspected visually, and the detected `bbox` positions were verified against the images with [imageonline.io/find-coordinates-of-image](https://imageonline.io/find-coordinates-of-image/).
 
 The numbers above were tuned by eye on the four sample documents, using the visualizer (`visualize_test.go`) that draws the detections over each image.
 
