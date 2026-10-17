@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"image"
+	_ "image/jpeg" // registers the JPEG decoder for image.DecodeConfig
 	"image/png"
 	"os"
 	"path/filepath"
@@ -37,19 +38,32 @@ func TestDetectBlankImage(t *testing.T) {
 	}
 }
 
-func TestDetectSamples(t *testing.T) {
-	paths, err := filepath.Glob("../../testdata/sample-*.png")
-	if err != nil || len(paths) == 0 {
-		t.Fatalf("no sample images found: %v", err)
-	}
+// testImages returns every PNG and JPEG in testdata.
+func testImages(t *testing.T) []string {
+	t.Helper()
 
-	for _, path := range paths {
+	var paths []string
+	for _, ext := range []string{"png", "jpg", "jpeg"} {
+		found, err := filepath.Glob("../../testdata/*." + ext)
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, found...)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no images found in testdata")
+	}
+	return paths
+}
+
+func TestDetectSamples(t *testing.T) {
+	for _, path := range testImages(t) {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			cfg, err := png.DecodeConfig(bytes.NewReader(data))
+			cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 			if err != nil {
 				t.Fatal(err)
 			}
