@@ -18,9 +18,18 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+// maxUploadBytes caps the whole request body, so the uploaded image is slightly smaller.
+const maxUploadBytes = 50 << 20
+
 func DetectHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+
 	file, _, err := r.FormFile("file")
 	if err != nil {
+		if isTooLarge(err) {
+			writeTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "expected a multipart file in field 'file'")
 		return
 	}
@@ -28,6 +37,10 @@ func DetectHandler(w http.ResponseWriter, r *http.Request) {
 
 	data, err := io.ReadAll(file)
 	if err != nil {
+		if isTooLarge(err) {
+			writeTooLarge(w)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "could not read the uploaded file")
 		return
 	}
@@ -48,6 +61,15 @@ func DetectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, detectResponse{Boxes: boxes})
+}
+
+func isTooLarge(err error) bool {
+	var tooLarge *http.MaxBytesError
+	return errors.As(err, &tooLarge)
+}
+
+func writeTooLarge(w http.ResponseWriter) {
+	writeError(w, http.StatusRequestEntityTooLarge, "the uploaded file is larger than 50 MB")
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {

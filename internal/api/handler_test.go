@@ -134,6 +134,21 @@ func TestDetectHandlerFormats(t *testing.T) {
 	}
 }
 
+func TestDetectHandlerUploadTooLarge(t *testing.T) {
+	rec := postFile(t, "file", make([]byte, maxUploadBytes+1))
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", rec.Code)
+	}
+	var resp errorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Error == "" {
+		t.Fatal("expected an error message")
+	}
+}
+
 func TestDetectHandlerImageWithoutCheckboxes(t *testing.T) {
 	gray := image.NewGray(image.Rect(0, 0, 200, 200))
 	for i := range gray.Pix {

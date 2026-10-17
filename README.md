@@ -21,7 +21,8 @@ HTTP service that detects checkboxes in a document image and classifies each one
 
 - `bbox` is in pixels of the uploaded image: top-left `(x1, y1)` and bottom-right `(x2, y2)`.
 - An image with no checkboxes returns `{"boxes": []}`.
-- Invalid input (empty file, not an image) returns a 4xx with an error message.
+- Invalid input (empty file, not an image) returns a 400 with an error message.
+- Uploads larger than 50 MB return a 413.
 
 **Example:**
 
@@ -159,12 +160,12 @@ The numbers above were tuned by eye on the four sample documents, using the visu
 - **Cropped or zoomed images.** Sizes are relative to the image width, so a crop that magnifies the checkboxes much more than a full page may fall outside the accepted range.
 - **Only rectangular checkboxes.** Circles (radio buttons) and other shapes are not detected.
 - **Possible false positives.** Square-looking shapes other than checkboxes can pass the filters. Letters of a diagonal watermark did in one case before a threshold change, and other cases may exist.
-- **Large uploads.** There is no size limit, and the whole image is decoded in memory.
+- **Large uploads.** Uploads are capped at 50 MB, but the cap is on the file size, not the pixels: a small, highly compressed image can still decode into a very large one in memory.
 
 ## Future Improvements
 
 - Add another variant besides "checked" and "not checked", which can be "unknown". In this case, a person needs to validate it. This way we can avoid false positives.
 - Classify tilted checkboxes using their rotated rectangle (or straighten the page first), and return the rotated corners.
 - Label the sample documents by hand and measure precision and recall, to tune the thresholds with numbers.
-- Reject uploads above a size limit with a 413.
+- Also limit the decoded size (width x height), not only the upload size.
 - Order boxes by visual row (group nearby `y1` values) instead of strict `y1`, so a row reads left to right even when its boxes differ by a pixel or two.
