@@ -58,14 +58,14 @@ The server listens on port 8000 by default. Set `PORT` to change it.
 
 ### Docker
 
-No local Go or OpenCV needed, the image bundles both.
+No local Go or OpenCV needed, the build stage bundles both.
 
 ```bash
 docker build -t checkbox-detection .
 docker run --rm -p 8000:8000 checkbox-detection
 ```
 
-The first build downloads the base image (several GB). The service is then available at `http://localhost:8000`.
+The first build downloads the build base image (several GB); the resulting image is about 430 MB. The service is then available at `http://localhost:8000`.
 
 ### Try it
 
@@ -145,8 +145,8 @@ The numbers above were tuned by eye on the four sample documents, using the visu
 ## Tradeoffs
 
 - **Classic computer vision instead of a trained model.** There are only four sample images and no labels to train or evaluate a model. Contours and filters need no training data, are fast, and always give the same output for the same input. The cost is hand-picked thresholds, tuned on those four samples, which may not transfer to other forms.
-- **gocv (OpenCV bindings) instead of pure Go.** It gives well-tested image primitives (threshold, contours) instead of reimplementing them. The cost is cgo and a heavy setup: OpenCV 4.13 must be installed to build locally, and the Docker image is about 3.9 GB.
-- **Single-stage Dockerfile.** Simplest to read and to run. A second stage that copies only the binary and the OpenCV libraries would shrink the image, at the cost of a longer Dockerfile.
+- **gocv (OpenCV bindings) instead of pure Go.** It gives well-tested image primitives (threshold, contours) instead of reimplementing them. The cost is cgo and a heavy setup: OpenCV 4.13 must be installed to build locally, and the Docker build image is about 3.9 GB (the final image is about 430 MB).
+- **Multi-stage Dockerfile.** The build stage has Go and OpenCV (about 3.9 GB). The final stage is `debian:bookworm-slim` with only the binary and the shared libraries `ldd` lists for it (about 430 MB). The cost is a longer Dockerfile, and the runtime stage must be the same distro as the build stage (glibc), so Alpine does not work.
 - **Relative sizes instead of fixed pixels.** Filters use fractions of the image width, so the same form scanned at another resolution still works. This assumes the image is a whole page.
 - **Inner borders accepted as candidates.** It recovers checkboxes fused with table lines (the whole second sample page depends on it), but a square-looking hole in some other shape could become a false positive.
 
@@ -167,4 +167,3 @@ The numbers above were tuned by eye on the four sample documents, using the visu
 - Label the sample documents by hand and measure precision and recall, to tune the thresholds with numbers.
 - Reject uploads above a size limit with a 413.
 - Order boxes by visual row (group nearby `y1` values) instead of strict `y1`, so a row reads left to right even when its boxes differ by a pixel or two.
-- Shrink the Docker image with a multi-stage build.
