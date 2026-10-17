@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"mime/multipart"
 	"net/http"
@@ -95,6 +96,41 @@ func TestDetectHandlerValidImage(t *testing.T) {
 	}
 	if len(resp.Boxes) == 0 {
 		t.Fatal("expected at least one box")
+	}
+}
+
+func TestDetectHandlerFormats(t *testing.T) {
+	pngData, err := os.ReadFile("../../testdata/sample-000.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := png.Decode(bytes.NewReader(pngData))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var jpgBuf bytes.Buffer
+	if err := jpeg.Encode(&jpgBuf, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	jpgData := jpgBuf.Bytes()
+	pdfData := []byte("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n")
+
+	tests := []struct {
+		name    string
+		content []byte
+		want    int
+	}{
+		{"png", pngData, http.StatusOK},
+		{"jpeg", jpgData, http.StatusOK},
+		{"pdf", pdfData, http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if rec := postFile(t, "file", tt.content); rec.Code != tt.want {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.want)
+			}
+		})
 	}
 }
 
