@@ -1,0 +1,122 @@
+openapi: 3.0.3
+info:
+  title: Checkbox Detection API
+  version: 1.0.0
+  description: Detects checkboxes in a document image and classifies each one as checked or unchecked.
+servers:
+  - url: http://localhost:8000
+paths:
+  /detect:
+    post:
+      summary: Detect checkboxes in an image
+      description: |
+        Sends one image and returns every detected checkbox, sorted by `y1`, `x1`, `x2`, `y2`.
+        The format is detected from the file content (PNG, JPEG, BMP, TIFF, WebP, GIF, PPM), not from its
+        extension. Other files, such as PDFs, are rejected with a 400. The request body is limited to 50 MB.
+      operationId: detect
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The document image.
+      responses:
+        "200":
+          description: Detected checkboxes. The list is empty if there are none.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetectResponse"
+              examples:
+                withBoxes:
+                  value:
+                    boxes:
+                      - bbox: [330, 507, 386, 553]
+                        is_checked: true
+                      - bbox: [488, 507, 545, 553]
+                        is_checked: false
+                noBoxes:
+                  value:
+                    boxes: []
+        "400":
+          description: The request is not a valid upload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                missingField:
+                  summary: Not multipart, or no `file` field
+                  value:
+                    error: "expected a multipart file in field 'file'"
+                unreadable:
+                  summary: The file could not be read
+                  value:
+                    error: could not read the uploaded file
+                empty:
+                  summary: Empty file
+                  value:
+                    error: the uploaded file is empty
+                notAnImage:
+                  summary: Not an image (text, PDF, corrupt data)
+                  value:
+                    error: the uploaded file is not a valid image
+        "405":
+          description: Any method other than POST. The body is plain text, not JSON.
+          headers:
+            Allow:
+              schema:
+                type: string
+                example: POST
+        "413":
+          description: The request body is larger than 50 MB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: the uploaded file is larger than 50 MB
+        "500":
+          description: Unexpected server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: internal error
+components:
+  schemas:
+    DetectResponse:
+      type: object
+      required: [boxes]
+      properties:
+        boxes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Box"
+    Box:
+      type: object
+      required: [bbox, is_checked]
+      properties:
+        bbox:
+          type: array
+          description: Pixels of the uploaded image, as [x1, y1, x2, y2] (top-left and bottom-right corners).
+          items:
+            type: integer
+          minItems: 4
+          maxItems: 4
+          example: [330, 507, 386, 553]
+        is_checked:
+          type: boolean
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

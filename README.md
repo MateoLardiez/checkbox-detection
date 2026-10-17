@@ -30,6 +30,9 @@ HTTP service that detects checkboxes in a document image and classifies each one
 curl -X POST http://localhost:8000/detect -F "file=@testdata/sample-000.png"
 ```
 
+The full contract, including every error response, is in [`openapi.yaml`](openapi.yaml).
+Paste and copy to see on https://editor.swagger.io/ .
+
 ## Requirements
 
 ### Functional
@@ -114,6 +117,7 @@ checkbox-detection/
 │       └── visualize_test.go   # draws detections on the samples (opt-in, see "Run the tests")
 ├── testdata/                   # sample document images
 ├── Dockerfile
+├── openapi.yaml                # API contract: request, response and errors
 ├── .env.example                # VISUALIZE_DIR for the visualizer
 ├── go.mod
 └── README.md
